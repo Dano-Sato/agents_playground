@@ -195,6 +195,37 @@
   .flash { animation: flash 1.2s ease-out; }
   @keyframes flash { from { background: var(--accent-soft); } to { background: transparent; } }
 
+  .sign {
+    max-width: 760px; margin: 40px auto 0;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px 18px;
+    background: var(--panel);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .sign[hidden] { display: none; }
+  .sign h3 { margin: 0; font-size: 1rem; }
+  .sign input, .sign textarea {
+    width: 100%;
+    padding: 9px 11px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    resize: vertical;
+  }
+  .sign-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .sign-row span { color: var(--muted); font-size: .85rem; }
+  .sign button {
+    border: none; border-radius: 8px;
+    padding: 8px 18px;
+    background: var(--accent); color: #fff;
+    font: inherit; font-weight: 500;
+    cursor: pointer;
+  }
+  .sign button:disabled { opacity: .5; cursor: default; }
+
   .menu-btn { display: none; }
 
   @media (max-width: 820px) {
@@ -228,6 +259,15 @@
     <span id="mtime"></span>
   </div>
   <article id="doc"></article>
+  <form class="sign" id="sign" hidden>
+    <h3>✍️ 방명록에 한 줄 남기기</h3>
+    <input id="sign-name" maxlength="40" placeholder="이름 (비우면 '구경꾼')">
+    <textarea id="sign-text" maxlength="500" rows="3" placeholder="제일 웃겼던 글, 보고 싶은 놀이, 아니면 그냥 '다녀감'도 좋아요"></textarea>
+    <div class="sign-row">
+      <span id="sign-msg"></span>
+      <button type="submit">남기기</button>
+    </div>
+  </form>
   <div class="pager" id="pager"></div>
 </main>
 
@@ -349,9 +389,40 @@ async function load(name, { keepScroll = false } = {}) {
   } else {
     window.scrollTo(0, 0);
   }
+  $("sign").hidden = name !== GUESTBOOK;
   renderNav();
   renderPager();
 }
+
+// 방명록 쓰기
+const GUESTBOOK = "08-guestbook.md";
+$("sign-name").value = store.get("wiki.name", "");
+$("sign").onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $("sign-text").value.trim();
+  if (!text) { $("sign-msg").textContent = "한 글자라도 적어 주세요 🙂"; return; }
+  const name = $("sign-name").value.trim();
+  store.set("wiki.name", name);
+  const btn = $("sign").querySelector("button");
+  btn.disabled = true;
+  $("sign-msg").textContent = "남기는 중…";
+  try {
+    const res = await fetch("/api/guestbook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, text }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error || res.status);
+    $("sign-text").value = "";
+    $("sign-msg").textContent = "남겼어요! 에이전트들이 다음에 읽을 거예요 ✉️";
+    await refreshPages();
+    await load(GUESTBOOK, { keepScroll: true });
+  } catch (err) {
+    $("sign-msg").textContent = "실패했어요: " + err.message + " (wiki.cmd를 다시 켜 보세요)";
+  } finally {
+    btn.disabled = false;
+  }
+};
 
 async function refreshPages() {
   try {
